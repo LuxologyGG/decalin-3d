@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decalin model</title>
+<style>
+  :root { --ink:#1d1d1b; --muted:#6b6862; --paper:#f3f0e8; --line:#d8d3c7; --ax:#c4442f; --eq:#2b7bb0; --fus:#d98a2b; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--paper); color:var(--ink);
+    font:15px/1.4 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  #stage { position:fixed; inset:0; }
+  header { position:fixed; top:18px; left:20px; right:20px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; gap:16px; flex-wrap:wrap; }
+  header > * { pointer-events:auto; }
+  h1 { margin:0; font-size:22px; font-weight:600; letter-spacing:-.01em; }
+  .sub { color:var(--muted); font-size:13px; margin-top:2px; }
+  .seg { display:inline-flex; border:1px solid var(--ink); border-radius:6px; overflow:hidden; }
+  .seg button { border:0; background:transparent; padding:7px 16px; font:inherit; cursor:pointer; color:var(--ink); }
+  .seg button + button { border-left:1px solid var(--ink); }
+  .seg button.on { background:var(--ink); color:var(--paper); }
+  .tools { position:fixed; left:20px; bottom:20px; display:flex; flex-wrap:wrap; gap:8px; max-width:calc(100% - 40px); }
+  .tools button { font:inherit; font-size:14px; padding:7px 12px; background:#fffdf8; border:1px solid var(--line); border-radius:6px; cursor:pointer; color:var(--ink); }
+  .tools button:hover { border-color:var(--ink); }
+  .tools button.on { border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink); }
+  .tools button.primary { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  #info { position:fixed; right:20px; bottom:20px; width:300px; max-width:calc(100% - 40px); background:#fffdf8; border:1px solid var(--line); border-radius:8px; padding:14px 16px; font-size:13.5px; }
+  #info b { font-weight:600; }
+  #info summary { cursor:pointer; list-style:none; }
+  #info summary::-webkit-details-marker { display:none; }
+  #info details[open] summary { margin-bottom:6px; }
+  #info .row { display:flex; align-items:center; gap:8px; margin-top:6px; color:var(--muted); }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; flex:none; }
+  .bar { width:18px; height:4px; border-radius:2px; display:inline-block; flex:none; }
+  #msg { position:fixed; left:50%; top:84px; transform:translateX(-50%); background:var(--ink); color:var(--paper); padding:8px 14px; border-radius:6px; font-size:14px; opacity:0; transition:opacity .25s; pointer-events:none; max-width:90%; text-align:center; }
+  .lbl { font-size:12px; font-style:italic; color:var(--ink); background:rgba(255,253,248,.85); padding:0 4px; border-radius:3px; border:1px solid var(--line); }
+  .lbl.ax { color:var(--ax); } .lbl.eq { color:var(--eq); }
+  .hint { color:var(--muted); font-size:12px; margin-top:8px; }
+  @media (max-width:720px) { #info { position:fixed; bottom:auto; top:118px; left:12px; right:12px; width:auto; font-size:12.5px; padding:9px 12px; } .tools { left:12px; bottom:12px; } header { left:12px; right:12px; } }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<header>
+  <div>
+    <h1>Decalin</h1>
+    <div class="sub">CHEM 210 SSG #7C &middot; Camron Farjami</div>
+  </div>
+  <div class="seg" id="iso">
+    <button data-k="cis">cis</button><button data-k="trans" class="on">trans</button>
+  </div>
+</header>
+<div class="tools">
+  <button class="primary" id="flip">Ring flip</button>
+  <button id="colorH" class="on">ax / eq colors</button>
+  <button id="labels" class="on">Fusion labels</button>
+  <button id="showH" class="on">Hydrogens</button>
+  <button id="down">Look down fusion bond</button>
+  <button id="reset">Reset view</button>
+</div>
+<div id="info"></div>
+<div id="msg"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "./lib/three.module.js",
+  "three/addons/": "./lib/addons/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const DATA = {"trans":{"elements":["C","C","C","C","C","C","C","C","C","C","H","H","H","H","H","H","H","H","H","H","H","H","H","H","H","H","H","H"],"bonds":[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[5,0],[9,0],[0,10],[1,11],[1,12],[2,13],[2,14],[3,15],[3,16],[4,17],[4,18],[5,19],[6,20],[6,21],[7,22],[7,23],[8,24],[8,25],[9,26],[9,27]],"rings":[[0,1,2,3,4,5],[0,5,6,7,8,9]],"fusion":[0,5],"energy_kcal":6.26,"A":{"xyz":[[-0.071,-0.767,-0.022],[1.12,-1.444,0.668],[2.446,-0.995,0.056],[2.588,0.524,0.061],[1.399,1.208,-0.609],[0.071,0.767,0.022],[-1.12,1.444,-0.668],[-2.446,0.995,-0.056],[-2.588,-0.524,-0.061],[-1.399,-1.208,0.609],[-0.077,-1.087,-1.074],[1.033,-2.533,0.583],[1.117,-1.206,1.739],[2.514,-1.363,-0.975],[3.278,-1.445,0.61],[3.514,0.809,-0.452],[2.675,0.877,1.096],[1.401,0.971,-1.681],[1.511,2.295,-0.524],[0.077,1.087,1.074],[-1.117,1.206,-1.739],[-1.033,2.533,-0.583],[-3.278,1.445,-0.61],[-2.514,1.363,0.975],[-3.514,-0.809,0.452],[-2.675,-0.877,-1.096],[-1.401,-0.971,1.681],[-1.511,-2.295,0.524]],"h":{"10":"ax","11":"eq","12":"ax","13":"ax","14":"eq","15":"eq","16":"ax","17":"ax","18":"eq","19":"ax","20":"ax","21":"eq","22":"eq","23":"ax","24":"eq","25":"ax","26":"ax","27":"eq"},"ringbonds":[[0,1,"eq"],[0,9,"eq"],[5,4,"eq"],[5,6,"eq"]]},"view":[-0.0894,-0.8103,0.5791],"up":[0.0075,0.3163,0.9486]},"cis":{"elements":["C","C","C","C","C","C","C","C","C","C","H","H","H","H","H","H","H","H","H","H","H","H","H","H","H","H","H","H"],"bonds":[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[5,0],[9,0],[0,10],[1,11],[1,12],[2,13],[2,14],[3,15],[3,16],[4,17],[4,18],[5,19],[6,20],[6,21],[7,22],[7,23],[8,24],[8,25],[9,26],[9,27]],"rings":[[0,1,2,3,4,5],[0,5,6,7,8,9]],"fusion":[0,5],"energy_kcal":8.18,"A":{"xyz":[[0.161,-1.018,-0.074],[0.988,-0.644,1.169],[2.318,-0.001,0.786],[2.121,1.212,-0.117],[1.292,0.865,-1.351],[-0.046,0.189,-1.014],[-1.064,1.193,-0.447],[-2.39,0.518,-0.107],[-2.198,-0.655,0.847],[-1.182,-1.659,0.308],[0.736,-1.776,-0.625],[1.184,-1.543,1.765],[0.433,0.045,1.815],[2.857,0.298,1.692],[2.946,-0.74,0.272],[3.098,1.597,-0.43],[1.635,2.015,0.448],[1.121,1.771,-1.945],[1.877,0.186,-1.984],[-0.463,-0.19,-1.958],[-1.246,1.989,-1.18],[-0.673,1.681,0.453],[-3.072,1.249,0.341],[-2.865,0.163,-1.03],[-1.875,-0.284,1.827],[-3.159,-1.159,1.006],[-1.606,-2.139,-0.583],[-1.026,-2.456,1.045]],"h":{"10":"ax","11":"eq","12":"ax","13":"eq","14":"ax","15":"eq","16":"ax","17":"eq","18":"ax","19":"eq","20":"eq","21":"ax","22":"eq","23":"ax","24":"ax","25":"eq","26":"ax","27":"eq"},"ringbonds":[[0,1,"ax"],[0,9,"eq"],[5,4,"eq"],[5,6,"ax"]]},"B":{"xyz":[[0.083,-1.027,-0.075],[1.525,-1.339,0.351],[2.263,-0.128,0.918],[2.206,1.061,-0.035],[0.77,1.41,-0.418],[0.033,0.199,-1.013],[-1.415,0.545,-1.394],[-2.34,0.684,-0.187],[-2.278,-0.544,0.713],[-0.847,-0.861,1.139],[-0.282,-1.896,-0.641],[1.536,-2.153,1.085],[2.078,-1.704,-0.524],[1.832,0.154,1.885],[3.309,-0.395,1.108],[2.685,1.929,0.432],[2.779,0.83,-0.941],[0.248,1.79,0.468],[0.785,2.229,-1.148],[0.555,-0.07,-1.942],[-1.441,1.468,-1.985],[-1.806,-0.249,-2.043],[-3.37,0.833,-0.532],[-2.072,1.577,0.39],[-2.699,-1.407,0.182],[-2.9,-0.382,1.601],[-0.488,-0.064,1.801],[-0.847,-1.783,1.733]],"h":{"10":"eq","11":"eq","12":"ax","13":"ax","14":"eq","15":"eq","16":"ax","17":"ax","18":"eq","19":"ax","20":"eq","21":"ax","22":"eq","23":"ax","24":"ax","25":"eq","26":"ax","27":"eq"},"ringbonds":[[0,1,"eq"],[0,9,"ax"],[5,4,"ax"],[5,6,"eq"]]},"view":[0.4265,0.3398,-0.8382],"up":[-0.1467,-0.8885,-0.4348]}};
+const COL = { C:0x3b3a37, H:0xf4f2ec, ax:0xc4442f, eq:0x2b7bb0, fus:0xd98a2b, bond:0x8f8a80 };
+
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0xf3f0e8);
+stage.appendChild(renderer.domElement);
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(innerWidth, innerHeight);
+Object.assign(labelRenderer.domElement.style, { position:'absolute', top:'0', pointerEvents:'none' });
+stage.appendChild(labelRenderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 200);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08; controls.minDistance = 6; controls.maxDistance = 60;
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a3, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(5, 8, 6); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xffffff, 0.5); fill.position.set(-6, -3, -4); scene.add(fill);
+
+const mol = new THREE.Group(); scene.add(mol);
+const sphere = new THREE.SphereGeometry(1, 32, 24);
+const cyl = new THREE.CylinderGeometry(1, 1, 1, 20, 1);
+const mat = c => new THREE.MeshStandardMaterial({ color:c, roughness:0.55, metalness:0.05 });
+
+let state = { iso:'trans', conf:'A', colorH:true, labels:true, showH:true, busy:false };
+let atoms = [], bonds = [], labels = [], pos = [];
+let infoOpen = !matchMedia('(max-width:720px)').matches;
+
+function cur() { return DATA[state.iso]; }
+function confData() { return cur()[state.conf]; }
+
+function build() {
+  mol.clear(); atoms = []; bonds = []; labels = [];
+  const d = cur(), c = confData();
+  pos = c.xyz.map(p => new THREE.Vector3(...p));
+  d.elements.forEach((el, i) => {
+    const m = new THREE.Mesh(sphere, mat(COL[el]));
+    m.scale.setScalar(el === 'C' ? 0.34 : 0.22);
+    m.userData = { el, i }; mol.add(m); atoms.push(m);
+  });
+  d.bonds.forEach(([a, b]) => {
+    const fusion = d.fusion.includes(a) && d.fusion.includes(b);
+    const m = new THREE.Mesh(cyl, mat(fusion ? COL.fus : COL.bond));
+    m.userData = { a, b, r: fusion ? 0.16 : (d.elements[a] === 'H' || d.elements[b] === 'H' ? 0.07 : 0.11), h: d.elements[a] === 'H' || d.elements[b] === 'H' };
+    mol.add(m); bonds.push(m);
+  });
+  makeLabels(); place(); paint(); info();
+}
+
+function makeLabels() {
+  labels.forEach(l => mol.remove(l)); labels = [];
+  confData().ringbonds.forEach(([f, x, t]) => {
+    const div = document.createElement('div'); div.className = 'lbl ' + t; div.textContent = t;
+    const o = new CSS2DObject(div); o.userData = { f, x }; mol.add(o); labels.push(o);
+  });
+}
+
+function place() {
+  atoms.forEach((m, i) => m.position.copy(pos[i]));
+  const up = new THREE.Vector3(0, 1, 0);
+  bonds.forEach(m => {
+    const { a, b, r } = m.userData; const pa = pos[a], pb = pos[b];
+    const dir = new THREE.Vector3().subVectors(pb, pa); const L = dir.length();
+    m.position.copy(pa).addScaledVector(dir, 0.5);
+    m.quaternion.setFromUnitVectors(up, dir.normalize());
+    m.scale.set(r, L, r);
+  });
+  labels.forEach(o => { const { f, x } = o.userData; o.position.copy(pos[f]).lerp(pos[x], 0.55); });
+}
+
+function paint() {
+  const d = cur(), c = confData();
+  atoms.forEach((m, i) => {
+    let col = COL[m.userData.el];
+    if (m.userData.el === 'H') {
+      const parent = d.bonds.find(([a, b]) => a === i || b === i); const cidx = parent[0] === i ? parent[1] : parent[0];
+      if (d.fusion.includes(cidx)) col = COL.fus;
+      else if (state.colorH) { const t = c.h[i]; col = t === 'ax' ? COL.ax : COL.eq; }
+    }
+    m.material.color.setHex(col);
+    m.visible = m.userData.el === 'C' || state.showH;
+  });
+  bonds.forEach(m => m.visible = !m.userData.h || state.showH);
+  labels.forEach(o => o.visible = state.labels);
+}
+
+function info() {
+  const el = document.getElementById('info'), cis = state.iso === 'cis';
+  const rb = confData().ringbonds.map(r => r[2]);
+  const nAx = rb.filter(t => t === 'ax').length;
+  const dE = (DATA.cis.energy_kcal - DATA.trans.energy_kcal).toFixed(1);
+  const open = infoOpen ? 'open' : '';
+  let html = `<details ${open}><summary><b>${cis ? 'cis' : 'trans'}-Decalin</b> &middot; ${cis ? 'flips' : 'locked'}</summary>` + (cis
+    ? `Both fusion H atoms point to the same face. At each shared carbon one ring bond is axial and one is equatorial (${nAx} ax, ${4 - nAx} eq).<br><b>Ring flip:</b> flips. Both chairs flip together and every ax/eq label swaps.<br><b>Energy:</b> ${dE} kcal/mol above trans (MMFF94).`
+    : `The fusion H atoms are axial and point to opposite faces. All four ring bonds at the fusion are equatorial.<br><b>Ring flip:</b> locked. A flip would need both fusion bonds axial, pointing opposite ways, so the second ring could not close.<br><b>Energy:</b> lower of the two (MMFF94).`);
+  html += `<div class="row"><span class="dot" style="background:var(--ax)"></span>axial H<span class="dot" style="background:var(--eq);margin-left:10px"></span>equatorial H</div>
+    <div class="row"><span class="bar" style="background:var(--fus)"></span>fusion bond and fusion H</div>
+    <div class="hint">Drag to rotate, scroll or pinch to zoom.</div></details>`;
+  el.innerHTML = html;
+  el.querySelector('details').addEventListener('toggle', e => { infoOpen = e.target.open; });
+}
+
+function frame(view) {
+  const d = cur(); const c = new THREE.Vector3();
+  pos.forEach(p => c.add(p)); c.multiplyScalar(1 / pos.length);
+  controls.target.copy(c);
+  if (view === 'down') {
+    const [f1, f2] = d.fusion; const ax = new THREE.Vector3().subVectors(pos[f1], pos[f2]).normalize();
+    const fit = Math.max(13, 4.6 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / camera.aspect);
+    camera.position.copy(pos[f1]).addScaledVector(ax, fit); controls.target.copy(pos[f1]);
+    camera.up.set(0, 1, 0);
+  } else {
+    const v = new THREE.Vector3(...d.view), u = new THREE.Vector3(...d.up);
+    camera.up.copy(u);
+    const fitH = 5.2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / camera.aspect, fitV = 3.6 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    camera.position.copy(c).addScaledVector(v, Math.max(15, fitH, fitV));
+  }
+  camera.lookAt(controls.target); controls.update();
+}
+function toast(t) { const m = document.getElementById('msg'); m.textContent = t; m.style.opacity = 1; clearTimeout(toast.h); toast.h = setTimeout(() => m.style.opacity = 0, 2600); }
+
+const ease = t => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2;
+function ringFlip() {
+  if (state.busy) return;
+  if (state.iso === 'trans') {
+    state.busy = true; const t0 = performance.now(); const base = mol.rotation.z;
+    (function shake(now) {
+      const t = (now - t0) / 650;
+      mol.rotation.z = base + Math.sin(t * Math.PI * 6) * 0.05 * (1 - t);
+      if (t < 1) requestAnimationFrame(shake); else { mol.rotation.z = base; state.busy = false; }
+    })(t0);
+    toast('trans-Decalin is locked. It cannot ring flip.');
+    return;
+  }
+  state.busy = true;
+  const from = state.conf, to = from === 'A' ? 'B' : 'A';
+  const P0 = DATA.cis[from].xyz, P1 = DATA.cis[to].xyz; const t0 = performance.now(), dur = 1700;
+  let swapped = false;
+  (function step(now) {
+    const t = Math.min(1, (now - t0) / dur), e = ease(t);
+    pos.forEach((p, i) => p.set(P0[i][0] + (P1[i][0] - P0[i][0]) * e, P0[i][1] + (P1[i][1] - P0[i][1]) * e, P0[i][2] + (P1[i][2] - P0[i][2]) * e));
+    if (!swapped && t > 0.5) { swapped = true; state.conf = to; makeLabels(); paint(); info(); }
+    place();
+    if (t < 1) requestAnimationFrame(step); else { state.busy = false; toast('Ring flipped: every axial position is now equatorial, and every equatorial one is axial.'); }
+  })(t0);
+}
+
+document.querySelectorAll('#iso button').forEach(b => b.onclick = () => {
+  if (state.busy || b.dataset.k === state.iso) return;
+  document.querySelectorAll('#iso button').forEach(x => x.classList.toggle('on', x === b));
+  state.iso = b.dataset.k; state.conf = 'A'; mol.rotation.set(0, 0, 0); build(); frame();
+});
+const tog = (id, key) => { const b = document.getElementById(id); b.onclick = () => { state[key] = !state[key]; b.classList.toggle('on', state[key]); paint(); }; };
+tog('colorH', 'colorH'); tog('labels', 'labels'); tog('showH', 'showH');
+document.getElementById('flip').onclick = ringFlip;
+document.getElementById('reset').onclick = () => frame();
+document.getElementById('down').onclick = () => frame('down');
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); labelRenderer.setSize(innerWidth, innerHeight);
+});
+build(); frame();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); labelRenderer.render(scene, camera); });
+</script>
+</body>
+</html>
